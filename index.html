@@ -48,6 +48,14 @@ main{padding:8px 12px}
 .remove-ads-link{display:block;text-align:center;padding:6px;font-size:11px;color:#999;text-decoration:underline;cursor:pointer;background:#f0f0f0}
 .ad-banner{position:fixed;bottom:0;left:0;right:0;height:30px;background:#ddd;display:flex;align-items:center;justify-content:center;font-size:12px;color:#999;z-index:20}
 .hidden{display:none!important}
+.cat-picker-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:none;align-items:flex-end;justify-content:center}
+.cat-picker-overlay.open{display:flex}
+.cat-picker{background:#fff;border-radius:16px 16px 0 0;padding:20px 16px 24px;width:100%;max-width:420px}
+.cat-picker-title{font-size:15px;font-weight:600;text-align:center;margin-bottom:16px;color:#333}
+.cat-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cat-picker-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;border:none;border-radius:12px;background:#f5f5f5;cursor:pointer;font-size:12px;color:#555;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.cat-picker-btn:active{transform:scale(.95);background:#e8f5e9}
+.cat-picker-btn span{font-size:28px}
 </style>
 </head>
 <body>
@@ -66,6 +74,13 @@ main{padding:8px 12px}
 </header>
 <main id="list-container"></main>
 
+<div class="cat-picker-overlay" id="cat-picker-overlay">
+  <div class="cat-picker">
+    <div class="cat-picker-title" id="cat-picker-title">Pick a category</div>
+    <div class="cat-picker-grid" id="cat-picker-grid"></div>
+  </div>
+</div>
+
 <a class="remove-ads-link" id="remove-ads-btn" href="https://buy.stripe.com/14A8wPd7PecR1S92fbak000" target="_blank">Remove Ads — $0.99</a>
 <div id="ad-slot" class="ad-banner">Ad</div>
 
@@ -74,12 +89,16 @@ const STORAGE_KEY = 'shoplist-v1';
 const LANG_KEY = 'shoplist-lang';
 const ONE_HOUR = 3600000;
 
+const SUPABASE_URL = ''; // Set after creating Supabase project
+const SUPABASE_ANON_KEY = ''; // Set after creating Supabase project
+
 const T = {
   en: {
     placeholder: 'Add item...',
     add: 'Add',
     done: n => `Done (${n})`,
     delete: 'Delete',
+    pickCategory: 'Pick a category',
     categories: {
       meat:    '🥩 Meat & Fish',
       produce: '🥦 Produce',
@@ -94,6 +113,7 @@ const T = {
     add: 'Adicionar',
     done: n => `Feito (${n})`,
     delete: 'Apagar',
+    pickCategory: 'Escolha uma categoria',
     categories: {
       meat:    '🥩 Carne & Peixe',
       produce: '🥦 Legumes & Frescos',
@@ -161,12 +181,74 @@ let items = load();
 let longPressTimer = null;
 let touchStartX = 0;
 
+let pendingItemName = null;
+
 function addItem(name) {
   name = name.trim();
   if (!name) return;
-  items.push({ id: uid(), name, category: detectCategory(name), checked: false, checkedAt: null });
+  const cat = detectCategory(name);
+  if (cat === 'grocery') {
+    pendingItemName = name;
+    showCategoryPicker();
+  } else {
+    items.push({ id: uid(), name, category: cat, checked: false, checkedAt: null });
+    save(items);
+    render();
+  }
+}
+
+function addItemWithCategory(name, category) {
+  items.push({ id: uid(), name, category, checked: false, checkedAt: null });
   save(items);
   render();
+}
+
+function showCategoryPicker() {
+  const t = T[lang];
+  const overlay = document.getElementById('cat-picker-overlay');
+  const grid = document.getElementById('cat-picker-grid');
+  document.getElementById('cat-picker-title').textContent = t.pickCategory;
+  const emojis = { meat:'\u{1F969}', produce:'\u{1F966}', bakery:'\u{1F35E}', dairy:'\u{1F9C0}', drinks:'\u{1F964}', grocery:'\u{1F6D2}' };
+  const labels = t.categories;
+  grid.textContent = '';
+  for (const key of ['meat','produce','bakery','dairy','drinks','grocery']) {
+    const btn = document.createElement('button');
+    btn.className = 'cat-picker-btn';
+    const emojiSpan = document.createElement('span');
+    emojiSpan.textContent = emojis[key];
+    const labelText = document.createTextNode(labels[key].replace(/^[^\s]+\s/, ''));
+    btn.appendChild(emojiSpan);
+    btn.appendChild(labelText);
+    btn.addEventListener('click', () => {
+      if (pendingItemName) {
+        addItemWithCategory(pendingItemName, key);
+        submitCategoryToSupabase(pendingItemName, key, lang);
+        pendingItemName = null;
+      }
+      overlay.classList.remove('open');
+    });
+    grid.appendChild(btn);
+  }
+  overlay.classList.add('open');
+}
+
+document.getElementById('cat-picker-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) {
+    if (pendingItemName) {
+      addItemWithCategory(pendingItemName, 'grocery');
+      pendingItemName = null;
+    }
+    e.currentTarget.classList.remove('open');
+  }
+});
+
+function submitCategoryToSupabase(itemName, category, locale) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  fetch(SUPABASE_URL + '/functions/v1/submit-category', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+    body: JSON.stringify({ item_name: itemName.toLowerCase().trim(), category, locale })
+  }).catch(() => {});
 }
 
 function toggleItem(id) {
