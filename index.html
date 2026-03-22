@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#2e7d32">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ShopList</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f0f0f0;color:#222;padding-bottom:80px}
+header{position:sticky;top:0;z-index:10;background:#2e7d32;padding:12px 16px;box-shadow:0 2px 4px rgba(0,0,0,.2)}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+header h1{color:#fff;font-size:20px}
+.lang-switcher{display:flex;gap:4px}
+.lang-btn{background:none;border:2px solid transparent;border-radius:6px;padding:2px 3px;cursor:pointer;font-size:1.3rem;line-height:1;opacity:.5;transition:all .2s;-webkit-tap-highlight-color:transparent}
+.lang-btn.active{opacity:1;border-color:rgba(255,255,255,.7);background:rgba(255,255,255,.15)}
+.lang-btn:active{transform:scale(.9)}
+.input-row{display:flex;gap:8px}
+.input-row input{flex:1;padding:10px 12px;border:none;border-radius:8px;font-size:16px;outline:none}
+.input-row button{padding:10px 18px;border:none;border-radius:8px;background:#1b5e20;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+.input-row button:active{background:#144d1a}
+main{padding:8px 12px}
+.category{margin-top:12px}
+.category-title{font-size:14px;font-weight:700;color:#555;padding:4px 8px;text-transform:uppercase;letter-spacing:.5px}
+.card{background:#fff;border-radius:10px;margin-top:6px;overflow:hidden}
+.item{display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid #eee;position:relative;overflow:hidden;touch-action:pan-y;user-select:none}
+.item:last-child{border-bottom:none}
+.item .check{width:24px;height:24px;border:2px solid #2e7d32;border-radius:50%;margin-right:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s}
+.item .check.checked{background:#2e7d32;border-color:#2e7d32}
+.item .check.checked::after{content:'✓';color:#fff;font-size:14px;font-weight:700}
+.item .check:active{transform:scale(1.2)}
+.item .name{flex:1;font-size:16px}
+.item .name.struck{text-decoration:line-through;color:#999}
+.item .delete-btn{position:absolute;right:0;top:0;bottom:0;width:70px;background:#e53935;color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer;display:none;align-items:center;justify-content:center}
+.item .delete-btn.visible{display:flex}
+.done-section{margin-top:20px}
+.done-header{display:flex;align-items:center;gap:6px;padding:8px;cursor:pointer;color:#777;font-size:14px;font-weight:600}
+.done-header::before{content:'▸';display:inline-block;transition:transform .15s}
+.done-header.open::before{transform:rotate(90deg)}
+.done-items .item .name{color:#aaa;text-decoration:line-through}
+.done-items .item .check{border-color:#aaa;background:#aaa}
+.done-items{display:none}
+.done-items.open{display:block}
+.done-items .card{background:#fafafa}
+.remove-ads-link{display:block;text-align:center;padding:6px;font-size:11px;color:#999;text-decoration:underline;cursor:pointer;background:#f0f0f0}
+.ad-banner{position:fixed;bottom:0;left:0;right:0;height:30px;background:#ddd;display:flex;align-items:center;justify-content:center;font-size:12px;color:#999;z-index:20}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-top">
+    <h1>ShopList</h1>
+    <div class="lang-switcher">
+      <button class="lang-btn" id="btn-pt" onclick="setLang('pt')" title="Português">🇵🇹</button>
+      <button class="lang-btn active" id="btn-en" onclick="setLang('en')" title="English">🇺🇸</button>
+    </div>
+  </div>
+  <div class="input-row">
+    <input type="text" id="item-input" placeholder="Add item..." autocomplete="off">
+    <button id="add-btn">Add</button>
+  </div>
+</header>
+<main id="list-container"></main>
+
+<a class="remove-ads-link" id="remove-ads-btn" href="https://buy.stripe.com/14A8wPd7PecR1S92fbak000" target="_blank">Remove Ads — $0.99</a>
+<div id="ad-slot" class="ad-banner">Ad</div>
+
+<script>
+const STORAGE_KEY = 'shoplist-v1';
+const LANG_KEY = 'shoplist-lang';
+const ONE_HOUR = 3600000;
+
+const T = {
+  en: {
+    placeholder: 'Add item...',
+    add: 'Add',
+    done: n => `Done (${n})`,
+    delete: 'Delete',
+    categories: {
+      meat:    '🥩 Meat & Fish',
+      produce: '🥦 Produce',
+      bakery:  '🍞 Bakery',
+      dairy:   '🧀 Dairy & Eggs',
+      drinks:  '🥤 Drinks',
+      grocery: '🛒 Grocery'
+    }
+  },
+  pt: {
+    placeholder: 'Adicionar item...',
+    add: 'Adicionar',
+    done: n => `Feito (${n})`,
+    delete: 'Apagar',
+    categories: {
+      meat:    '🥩 Carne & Peixe',
+      produce: '🥦 Legumes & Frescos',
+      bakery:  '🍞 Padaria',
+      dairy:   '🧀 Laticínios & Ovos',
+      drinks:  '🥤 Bebidas',
+      grocery: '🛒 Mercearia'
+    }
+  }
+};
+
+let lang = localStorage.getItem(LANG_KEY) || 'en';
+
+function setLang(l) {
+  lang = l;
+  localStorage.setItem(LANG_KEY, l);
+  applyLang();
+  render();
+}
+
+function applyLang() {
+  const t = T[lang];
+  document.getElementById('item-input').placeholder = t.placeholder;
+  document.getElementById('add-btn').textContent = t.add;
+  document.getElementById('btn-pt').classList.toggle('active', lang === 'pt');
+  document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+  document.documentElement.lang = lang;
+}
+
+const CATEGORIES = [
+  { key: 'meat',    keywords: ['frango','peixe','carne','picanha','atum','salmão','salmao','ameijoas','gambas','bacalhau','chicken','fish','beef','pork','lamb','shrimp','tuna','salmon'] },
+  { key: 'produce', keywords: ['alface','tomate','cenoura','cebola','alho','batata','limão','limao','laranja','maçã','maca','banana','coentros','salsa','pepino','pimento','lettuce','tomato','carrot','onion','garlic','potato','lemon','orange','apple','cucumber','pepper','herbs'] },
+  { key: 'bakery',  keywords: ['pão','pao','bolo','croissant','tostas','bread','cake','pastry','toast'] },
+  { key: 'dairy',   keywords: ['queijo','manteiga','iogurte','ovos','natas','cheese','butter','yogurt','eggs','cream'] },
+  { key: 'drinks',  keywords: ['água','agua','sumo','vinho','cerveja','coca','pepsi','refrigerante','water','juice','wine','beer','soda'] },
+  { key: 'grocery', keywords: [] }
+];
+
+const LEITE_DRINKS_REGEX = /^leite$/i;
+const MILK_KEYWORD = 'milk';
+
+function detectCategory(name) {
+  const lower = name.toLowerCase().trim();
+  if (LEITE_DRINKS_REGEX.test(lower)) return 'drinks';
+  if (lower.includes('leite')) return 'dairy';
+  if (lower.includes(MILK_KEYWORD)) return 'dairy';
+  for (const cat of CATEGORIES) {
+    if (cat.key === 'grocery') continue;
+    for (const kw of cat.keywords) {
+      if (lower.includes(kw)) return cat.key;
+    }
+  }
+  return 'grocery';
+}
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+
+function save(items) { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+let items = load();
+let longPressTimer = null;
+let touchStartX = 0;
+
+function addItem(name) {
+  name = name.trim();
+  if (!name) return;
+  items.push({ id: uid(), name, category: detectCategory(name), checked: false, checkedAt: null });
+  save(items);
+  render();
+}
+
+function toggleItem(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  item.checked = !item.checked;
+  item.checkedAt = item.checked ? Date.now() : null;
+  save(items);
+  render();
+}
+
+function deleteItem(id) {
+  items = items.filter(i => i.id !== id);
+  save(items);
+  render();
+}
+
+function isInDone(item) {
+  return item.checked && item.checkedAt && (Date.now() - item.checkedAt >= ONE_HOUR);
+}
+
+function render() {
+  const t = T[lang];
+  const container = document.getElementById('list-container');
+  const active = items.filter(i => !isInDone(i));
+  const done = items.filter(i => isInDone(i));
+
+  let html = '';
+
+  for (const cat of CATEGORIES) {
+    const catItems = active.filter(i => i.category === cat.key);
+    if (!catItems.length) continue;
+    catItems.sort((a, b) => (a.checked ? 1 : 0) - (b.checked ? 1 : 0));
+    html += `<div class="category"><div class="category-title">${t.categories[cat.key]}</div><div class="card">`;
+    for (const item of catItems) { html += renderItem(item, t); }
+    html += '</div></div>';
+  }
+
+  if (done.length) {
+    html += `<div class="done-section">
+      <div class="done-header" id="done-toggle">${t.done(done.length)}</div>
+      <div class="done-items" id="done-items"><div class="card">`;
+    for (const item of done) { html += renderItem(item, t); }
+    html += '</div></div></div>';
+  }
+
+  container.innerHTML = html;
+
+  const toggle = document.getElementById('done-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      toggle.classList.toggle('open');
+      document.getElementById('done-items').classList.toggle('open');
+    });
+  }
+
+  attachItemEvents();
+}
+
+function renderItem(item, t) {
+  const struck = item.checked ? ' struck' : '';
+  const checked = item.checked ? ' checked' : '';
+  return `<div class="item" data-id="${item.id}">
+    <div class="check${checked}" data-action="toggle"></div>
+    <span class="name${struck}">${esc(item.name)}</span>
+    <button class="delete-btn" data-action="delete">${t.delete}</button>
+  </div>`;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function attachItemEvents() {
+  document.querySelectorAll('.item').forEach(el => {
+    const id = el.dataset.id;
+    el.querySelector('[data-action="toggle"]').addEventListener('click', e => {
+      e.stopPropagation();
+      toggleItem(id);
+    });
+    el.querySelector('[data-action="delete"]').addEventListener('click', e => {
+      e.stopPropagation();
+      deleteItem(id);
+    });
+    el.addEventListener('touchstart', e => {
+      touchStartX = e.touches[0].clientX;
+      longPressTimer = setTimeout(() => {
+        el.querySelector('.delete-btn').classList.add('visible');
+      }, 500);
+    }, { passive: true });
+    el.addEventListener('touchmove', e => {
+      const dx = e.touches[0].clientX - touchStartX;
+      if (dx < -50) {
+        clearTimeout(longPressTimer);
+        el.querySelector('.delete-btn').classList.add('visible');
+      }
+    }, { passive: true });
+    el.addEventListener('touchend', () => { clearTimeout(longPressTimer); });
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.delete-btn')) {
+      document.querySelectorAll('.delete-btn.visible').forEach(b => b.classList.remove('visible'));
+    }
+  });
+}
+
+const input = document.getElementById('item-input');
+const addBtn = document.getElementById('add-btn');
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { addItem(input.value); input.value = ''; }
+});
+addBtn.addEventListener('click', () => { addItem(input.value); input.value = ''; });
+
+if (localStorage.getItem('adsRemoved') === 'true') {
+  document.getElementById('ad-slot').classList.add('hidden');
+  document.getElementById('remove-ads-btn').classList.add('hidden');
+}
+
+setInterval(render, 60000);
+
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'shoplist-v1';
+    self.addEventListener('install', e => {
+      e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/'])));
+      self.skipWaiting();
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+    });
+  `;
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+}
+
+applyLang();
+render();
+</script>
+</body>
+</html>
