@@ -395,6 +395,12 @@ input.addEventListener('keydown', e => {
 });
 addBtn.addEventListener('click', () => { addItem(input.value); input.value = ''; });
 
+// Check if returning from Stripe payment
+if (new URLSearchParams(window.location.search).has('ads_removed')) {
+  localStorage.setItem('adsRemoved', 'true');
+  window.history.replaceState({}, '', window.location.pathname);
+}
+
 if (localStorage.getItem('adsRemoved') === 'true') {
   document.getElementById('ad-slot').classList.add('hidden');
   document.getElementById('remove-ads-btn').classList.add('hidden');
