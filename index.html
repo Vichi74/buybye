@@ -36,6 +36,7 @@ main{padding:8px 12px}
 .item .name.struck{text-decoration:line-through;color:#999}
 .item .delete-btn{position:absolute;right:0;top:0;bottom:0;width:70px;background:#e53935;color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer;display:none;align-items:center;justify-content:center}
 .item .delete-btn.visible{display:flex}
+@media(hover:hover){.item:hover .delete-btn{display:flex;width:auto;padding:0 12px;position:static;border-radius:6px;height:30px;font-size:12px}}
 .done-section{margin-top:20px}
 .done-header{display:flex;align-items:center;gap:6px;padding:8px;cursor:pointer;color:#777;font-size:14px;font-weight:600}
 .done-header::before{content:'▸';display:inline-block;transition:transform .15s}
