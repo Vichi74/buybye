@@ -57,6 +57,17 @@ main{padding:8px 12px}
 .cat-picker-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;border:none;border-radius:12px;background:#f5f5f5;cursor:pointer;font-size:12px;color:#555;transition:all .15s;-webkit-tap-highlight-color:transparent}
 .cat-picker-btn:active{transform:scale(.95);background:#e8f5e9}
 .cat-picker-btn span{font-size:28px}
+.install-banner{position:fixed;bottom:36px;left:12px;right:12px;background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:30;display:none;align-items:center;gap:12px;animation:slideUp .3s ease}
+.install-banner.show{display:flex}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.install-banner-icon{font-size:28px;flex-shrink:0}
+.install-banner-text{flex:1;font-size:13px;line-height:1.4;color:#333}
+.install-banner-text strong{display:block;font-size:14px;margin-bottom:2px}
+.install-banner-btn{padding:8px 16px;border:none;border-radius:8px;background:#2e7d32;color:#fff;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0}
+.install-banner-btn:active{background:#1b5e20}
+.install-banner-close{position:absolute;top:6px;right:10px;background:none;border:none;font-size:18px;color:#aaa;cursor:pointer;padding:4px}
+.ios-steps{margin-top:6px;font-size:12px;color:#666}
+.ios-steps .share-icon{display:inline-block;width:18px;height:18px;vertical-align:middle;margin:0 2px}
 </style>
 </head>
 <body>
@@ -80,6 +91,13 @@ main{padding:8px 12px}
     <div class="cat-picker-title" id="cat-picker-title">Pick a category</div>
     <div class="cat-picker-grid" id="cat-picker-grid"></div>
   </div>
+</div>
+
+<div class="install-banner" id="install-banner">
+  <button class="install-banner-close" id="install-banner-close">&times;</button>
+  <div class="install-banner-icon">📲</div>
+  <div class="install-banner-text" id="install-banner-text"></div>
+  <button class="install-banner-btn" id="install-banner-btn"></button>
 </div>
 
 <a class="remove-ads-link" id="remove-ads-btn" href="https://buy.stripe.com/14A8wPd7PecR1S92fbak000" target="_blank">Remove Ads — $0.99</a>
@@ -401,6 +419,65 @@ if ('serviceWorker' in navigator) {
 
 applyLang();
 render();
+
+// ============ Install Banner ============
+(function() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  if (isStandalone || localStorage.getItem('installDismissed')) return;
+
+  const banner = document.getElementById('install-banner');
+  const textEl = document.getElementById('install-banner-text');
+  const btnEl = document.getElementById('install-banner-btn');
+  const closeEl = document.getElementById('install-banner-close');
+  let deferredPrompt = null;
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isAndroid = /android/i.test(navigator.userAgent);
+
+  function dismiss() {
+    banner.classList.remove('show');
+    localStorage.setItem('installDismissed', 'true');
+  }
+  closeEl.addEventListener('click', dismiss);
+
+  if (isIOS) {
+    // iOS: show instructions
+    textEl.textContent = '';
+    const strong = document.createElement('strong');
+    strong.textContent = lang === 'pt' ? 'Instalar BuyBye!' : 'Install BuyBye!';
+    textEl.appendChild(strong);
+    const steps = document.createElement('div');
+    steps.className = 'ios-steps';
+    steps.textContent = lang === 'pt'
+      ? 'Toque em compartilhar (\u2B06) e depois "Ecrã inicial"'
+      : 'Tap Share (\u2B06) then "Add to Home Screen"';
+    textEl.appendChild(steps);
+    btnEl.textContent = 'OK';
+    btnEl.addEventListener('click', dismiss);
+    setTimeout(() => banner.classList.add('show'), 2000);
+  } else {
+    // Android & desktop: use beforeinstallprompt
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const strong = document.createElement('strong');
+      strong.textContent = lang === 'pt' ? 'Instalar BuyBye!' : 'Install BuyBye!';
+      textEl.textContent = '';
+      textEl.appendChild(strong);
+      const desc = document.createTextNode(
+        lang === 'pt' ? ' Adicionar ao ecrã inicial' : ' Add to your home screen'
+      );
+      textEl.appendChild(desc);
+      btnEl.textContent = lang === 'pt' ? 'Instalar' : 'Install';
+      btnEl.addEventListener('click', () => {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(() => { banner.classList.remove('show'); });
+      });
+      setTimeout(() => banner.classList.add('show'), 2000);
+    });
+  }
+})();
 </script>
 </body>
 </html>
