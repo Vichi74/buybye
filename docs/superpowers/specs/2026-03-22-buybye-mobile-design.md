@@ -16,6 +16,7 @@ Transform BuyBye from a single-file PWA into a native mobile app (iOS + Android)
 - User accounts or cloud sync
 - Runtime server calls for categorization (everything baked at build time)
 - Backend beyond a single Supabase table + edge function
+- Server-side receipt validation for IAP
 
 ---
 
@@ -35,17 +36,17 @@ Three independent pieces, each with its own deploy pipeline:
 
 ### Tech Stack
 
-- React Native + Expo (managed workflow)
+- React Native + Expo SDK 52+ (managed workflow), minimum iOS 16+, Android 8+
 - TypeScript
 - AsyncStorage for local persistence
 - `react-native-google-mobile-ads` for AdMob
-- `react-native-iap` for in-app purchases
+- `react-native-iap` for in-app purchases (requires EAS Build — cannot be tested in Expo Go; needs Apple IAP entitlement and Google Play billing setup on their respective consoles)
 
 ### Screens
 
 The app is intentionally minimal — one main screen plus a settings area:
 
-- **ShoppingList** — Input field at top, items grouped by category in cards, check items off, swipe-left or long-press to delete, collapsible "Done" section for checked items (moved there after 1 hour). This mirrors the current PWA behavior exactly.
+- **ShoppingList** — Input field at top, items grouped by category in cards, check items off, swipe-left or long-press to delete, collapsible "Done" section for checked items (moved there 1 hour after being checked off). This mirrors the current PWA behavior exactly. The app is renamed from "ShopList" (current PWA title) to "BuyBye" for the mobile release.
 - **Settings** — Language toggle (EN/PT). Accessible from the header.
 
 ### Data Layer
@@ -59,18 +60,18 @@ The app is intentionally minimal — one main screen plus a settings area:
 1. User types an item name
 2. App matches against the local `categories.json` keyword list
 3. **If match found:** Item is categorized automatically (no server call)
-4. **If no match:** App shows a quick category picker (6 category icons). User taps one.
+4. **If no match:** A bottom sheet appears with 6 category icons. The item is not added until the user picks a category. If the user dismisses the sheet without choosing, the item is added under "Grocery" and no Supabase POST is sent.
    - Item is categorized immediately in the local list
    - A background POST is sent to Supabase: `{ item_name, category, locale }`
    - If the POST fails (offline, etc.), it's silently dropped — no retry queue needed
 
 ### Monetization
 
-- **Free tier:** Google AdMob banner ad fixed at the bottom of the screen
+- **Free tier:** Google AdMob banner ad fixed at the bottom of the screen. AdMob App ID stored as an EAS secret and injected into app.json at build time. Test ad unit IDs used during development.
 - **Paid tier ($0.99):** One-time non-consumable in-app purchase via `react-native-iap`
   - Removes the banner ad permanently
   - Purchase state stored locally in AsyncStorage
-  - Verified via App Store / Play Store receipt validation
+  - Client-side receipt verification only (via `react-native-iap` built-in methods — no server-side validation)
   - Restore purchases supported (required by Apple)
 
 ### Bilingual Support
@@ -114,7 +115,7 @@ Runs locally or in CI before each app release (daily or weekly cadence):
 
 1. Queries `category_submissions` using the service key
 2. For each `item_name`, selects the most commonly submitted category (majority vote)
-3. Applies a minimum threshold of 3 submissions to filter noise
+3. Applies a minimum threshold of 3 submissions to filter noise (this means crowdsourced additions will be sparse early on — the hardcoded keyword list carries the full weight at launch)
 4. Merges results with the existing hardcoded keywords (hardcoded keywords take precedence for known items)
 5. Outputs an updated `categories.json` to the app bundle
 
@@ -140,7 +141,7 @@ Static HTML/CSS/JS. Design will be created using the `frontend-design` skill —
 
 ### PWA Retirement
 
-The existing PWA at getbuybye.com gets replaced by the landing page. Users who previously installed the PWA will retain their cached version, but new visitors see the showroom.
+The existing PWA at getbuybye.com gets replaced by the landing page. Users who previously installed the PWA will retain their cached version (service worker left to cache-expire naturally, not explicitly killed), but new visitors see the showroom. No data migration from PWA localStorage to the mobile app — users start fresh on mobile.
 
 ---
 
